@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Odd1Owt</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+<div class="shell">
+  <div class="logo">Odd1<span>Owt</span></div>
+
+  <!-- HOME -->
+  <section id="home">
+    <input id="nameInput" placeholder="Your name" />
+    <div class="row" style="margin-top:10px">
+      <button class="btn-red"   onclick="createRoom()">Create Lobby</button>
+      <button class="btn-white" onclick="show('join')">Join Lobby</button>
+    </div>
+    <div class="small" style="margin-top:10px">Tip: your name saves automatically.</div>
+  </section>
+
+  <!-- JOIN -->
+  <section id="join" style="display:none">
+    <input id="codeInput" placeholder="Lobby code (e.g. A1B2C3)" />
+    <button class="btn-red" onclick="joinRoom()">Join</button>
+    <button class="btn-ghost" style="margin-top:10px" onclick="show('home')">Back</button>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="lobby" style="display:none">
+    <div class="tag">Lobby</div>
+    <div class="bubble" style="padding:12px" id="playersBox">Waiting for players...</div>
+    <div class="bubble" id="scoreBox"></div>
+
+    <!-- Deck selector — visible to host only (toggled in game.js) -->
+    <div id="deckSelectorWrap" style="display:none">
+      <div class="tag" style="margin-bottom:10px">Choose Question Deck</div>
+      <div class="deck-grid" id="deckGrid"></div>
+      <div class="used-q-info" id="deckUsedInfo"></div>
+    </div>
+
+    <!-- Active deck label — visible to non-hosts only (toggled in game.js) -->
+    <div id="deckViewerWrap" style="display:none">
+      <div class="active-deck-bar" id="deckViewerLabel">📦 Deck: —</div>
+    </div>
+
+    <button class="btn-white" onclick="copyInvite()">Copy Invite Link</button>
+    <button class="btn-red" style="margin-top:10px" onclick="hostStartRound()">Start Round</button>
+    <div class="small center" id="hostHint" style="margin-top:10px"></div>
+  </section>
+
+  <!-- PHASE 1 — Prompt + Vote -->
+  <section id="p1" style="display:none">
+    <div class="tag">Phase 1 — Prompt + Vote</div>
+    <div class="bubble" id="p1Question"></div>
+    <div class="small">Vote who fits the question best (everyone votes).</div>
+    <div class="list" id="p1VoteList"></div>
+    <div class="small center" id="p1Status"></div>
+  </section>
+
+  <!-- PHASE 2 — Interrogation -->
+  <section id="p2" style="display:none">
+    <div class="tag">Phase 2 — Interrogation</div>
+    <div class="bubble"><b>Normal Question:</b><br><span id="p2NormalQ"></span></div>
+    <div class="timer" id="p2Timer">05:00</div>
+    <div class="bubble" id="p2WhoVoted"></div>
+    <button class="btn-white" id="skipBtn" style="display:none" onclick="hostSkipToFinal()">
+      Skip to Final Vote
+    </button>
+    <div class="small center" id="p2Status"></div>
+  </section>
+
+  <!-- PHASE 3 — Final Vote -->
+  <section id="p3" style="display:none">
+    <div class="tag">Phase 3 — Final Vote</div>
+    <div class="bubble"><b>Vote out the Odd1Owt</b></div>
+    <div class="list" id="p3VoteList"></div>
+    <div class="small center" id="p3Status"></div>
+  </section>
+
+  <!-- PHASE 4 — Reveal -->
+  <section id="p4" style="display:none">
+    <div class="tag">Phase 4 — Reveal</div>
+    <div class="revealWrap">
+      <div class="revealBox">
+        <div class="sweep"></div>
+        <div class="center big" id="p4Title">Revealing...</div>
+        <div class="bubble" id="p4Details" style="margin-top:12px"></div>
+      </div>
+    </div>
+    <div class="bubble" id="p4Score"></div>
+    <button class="btn-red" id="nextRoundBtn" onclick="hostStartRound()">Next Round</button>
+    <div class="small center" id="p4HostNote" style="margin-top:10px"></div>
+  </section>
+
+</div>
+
+<!--
+  Load order matters:
+  1. questions.js  — defines the DECKS object (plain global, no imports)
+  2. game.js       — uses DECKS; imports Firebase as an ES module
+-->
+<script src="questions.js"></script>
+<script type="module" src="game.js"></script>
+</body>
+</html>

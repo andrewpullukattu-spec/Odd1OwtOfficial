@@ -1,0 +1,249 @@
+/* ─── CSS VARIABLES ──────────────────────────────────────────────────────────── */
+:root {
+  --bg: #0b0b0e;
+  --card: #111114;
+  --panel: #1c1c21;
+  --text: #e5e5e5;
+  --red: #ef4444;
+  --green: #22c55e;
+  --gold: #ffb703;
+  --muted: #9ca3af;
+  --border: rgba(255, 255, 255, 0.08);
+  --blue: #3b82f6;
+  --orange: #f97316;
+  --purple: #a855f7;
+  --teal: #14b8a6;
+}
+
+/* ─── BASE ───────────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* ─── SHELL / LAYOUT ─────────────────────────────────────────────────────────── */
+.shell {
+  width: 100%;
+  max-width: 460px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 22px;
+}
+
+.logo {
+  font-weight: 900;
+  font-size: 34px;
+  text-align: center;
+  margin: 4px 0 18px;
+}
+
+.logo span { color: var(--red); }
+
+/* ─── COMMON COMPONENTS ──────────────────────────────────────────────────────── */
+.bubble {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  margin: 14px 0;
+  line-height: 1.35;
+}
+
+input, button {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  font-size: 16px;
+}
+
+input {
+  background: var(--panel);
+  color: var(--text);
+}
+
+button { cursor: pointer; font-weight: 700; }
+
+.btn-red   { background: var(--red);   border-color: transparent; color: white; }
+.btn-white { background: white;        border-color: transparent; color: black; }
+.btn-ghost { background: transparent;  border: 1px solid var(--border); color: var(--text); }
+.btn-small { padding: 6px 12px; font-size: 12px; border-radius: 8px; width: auto; }
+
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+
+.small { font-size: 12px; color: var(--muted); }
+.center { text-align: center; }
+
+.tag {
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+/* ─── VOTE LISTS ─────────────────────────────────────────────────────────────── */
+.list button {
+  margin-top: 10px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.list button.selected { outline: 2px solid var(--green); }
+
+/* ─── SCOREBOARD ─────────────────────────────────────────────────────────────── */
+.scoreRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.scoreVal { color: var(--gold); font-weight: 900; }
+
+/* ─── TIMER ──────────────────────────────────────────────────────────────────── */
+.timer {
+  font-size: 52px;
+  font-weight: 950;
+  text-align: center;
+  color: var(--red);
+  margin: 10px 0;
+}
+
+/* ─── DECK SELECTOR ──────────────────────────────────────────────────────────── */
+.deck-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.deck-card {
+  background: var(--panel);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+
+.deck-card:hover { border-color: rgba(255, 255, 255, 0.2); }
+.deck-card.active { border-color: var(--green); background: rgba(34, 197, 94, 0.08); }
+
+.deck-card .dk-name  { font-weight: 800; font-size: 15px; margin-bottom: 4px; }
+.deck-card .dk-desc  { font-size: 11px; color: var(--muted); }
+.deck-card .dk-icon  { font-size: 22px; margin-bottom: 6px; }
+
+.deck-card .dk-check {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 18px; height: 18px;
+  background: var(--green);
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+
+.deck-card.active .dk-check { display: flex; }
+
+/* Deck icon colour accents */
+.deck-casual1 .dk-icon { color: #3b82f6; }
+.deck-casual2 .dk-icon { color: #14b8a6; }
+.deck-spicy   .dk-icon { color: #f97316; }
+.deck-deep    .dk-icon { color: #a855f7; }
+.deck-random  .dk-icon { color: #ffb703; }
+.deck-all     .dk-icon { color: #e5e5e5; }
+
+.active-deck-bar {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--green);
+  font-weight: 700;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.used-q-info {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* ─── LOBBY PLAYER LIST ──────────────────────────────────────────────────────── */
+.player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.player-row:last-child { border-bottom: none; }
+
+.player-name { font-size: 14px; }
+
+.kick-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--red);
+  border-radius: 8px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  font-weight: 700;
+  width: auto;
+}
+
+.kick-btn:hover { background: rgba(239, 68, 68, 0.25); }
+
+.you-tag { color: var(--muted); font-size: 11px; margin-left: 4px; }
+
+/* ─── PHASE 4 REVEAL ANIMATION ───────────────────────────────────────────────── */
+.revealWrap { margin-top: 10px; }
+
+.revealBox {
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  overflow: hidden;
+  position: relative;
+}
+
+.sweep {
+  position: absolute;
+  inset: -60px -60px auto -60px;
+  height: 120px;
+  transform: rotate(-8deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 183, 3, 0.22), transparent);
+  animation: sweep 1.6s ease-in-out infinite;
+}
+
+@keyframes sweep {
+  0%   { transform: translateX(-60%) rotate(-8deg); }
+  100% { transform: translateX(60%)  rotate(-8deg); }
+}
+
+.big  { font-size: 26px; font-weight: 950; }
+.win  { color: var(--green); font-weight: 950; }
+.lose { color: var(--red);   font-weight: 950; }
