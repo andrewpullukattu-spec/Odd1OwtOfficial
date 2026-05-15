@@ -8,24 +8,40 @@
 </head>
 
 <body>
+<div id="toastContainer"></div>
+
 <div class="shell">
   <div class="logo">Odd1<span>Owt</span></div>
 
-  <!-- HOME -->
+  <!-- HOME (also handles joining via invite link) -->
   <section id="home">
     <input id="nameInput" placeholder="Your name" />
-    <div class="row" style="margin-top:10px">
-      <button class="btn-red"   onclick="createRoom()">Create Lobby</button>
-      <button class="btn-white" onclick="show('join')">Join Lobby</button>
-    </div>
-    <div class="small" style="margin-top:10px">Tip: your name saves automatically.</div>
-  </section>
 
-  <!-- JOIN -->
-  <section id="join" style="display:none">
-    <input id="codeInput" placeholder="Lobby code (e.g. A1B2C3)" />
-    <button class="btn-red" onclick="joinRoom()">Join</button>
-    <button class="btn-ghost" style="margin-top:10px" onclick="show('home')">Back</button>
+    <!-- Shown only when arriving via an invite link -->
+    <div id="joinFromLink" style="display:none;margin-top:10px">
+      <div class="small" style="margin-bottom:6px;color:var(--muted)">
+        Joining lobby <b id="joinCodeLabel"></b>
+      </div>
+      <button class="btn-red" onclick="joinRoom()">Join Lobby</button>
+      <button class="btn-ghost" style="margin-top:10px" onclick="clearInvite()">Back</button>
+    </div>
+
+    <!-- Shown on normal home screen -->
+    <div id="homeButtons" style="margin-top:10px">
+      <div class="row">
+        <button class="btn-red"   onclick="createRoom()">Create Lobby</button>
+        <button class="btn-white" onclick="showJoinInput()">Join Lobby</button>
+      </div>
+    </div>
+
+    <!-- Manual code entry (no invite link) -->
+    <div id="joinManual" style="display:none;margin-top:10px">
+      <input id="codeInput" placeholder="Lobby code (e.g. A1B2C3)" />
+      <button class="btn-red" style="margin-top:10px" onclick="joinRoom()">Join</button>
+      <button class="btn-ghost" style="margin-top:10px" onclick="hideJoinInput()">Back</button>
+    </div>
+
+    <div class="small" style="margin-top:10px">Tip: your name saves automatically.</div>
   </section>
 
   <!-- LOBBY -->
@@ -34,14 +50,11 @@
     <div class="bubble" style="padding:12px" id="playersBox">Waiting for players...</div>
     <div class="bubble" id="scoreBox"></div>
 
-    <!-- Deck selector — visible to host only (toggled in game.js) -->
     <div id="deckSelectorWrap" style="display:none">
       <div class="tag" style="margin-bottom:10px">Choose Question Deck</div>
       <div class="deck-grid" id="deckGrid"></div>
       <div class="used-q-info" id="deckUsedInfo"></div>
     </div>
-
-    <!-- Active deck label — visible to non-hosts only (toggled in game.js) -->
     <div id="deckViewerWrap" style="display:none">
       <div class="active-deck-bar" id="deckViewerLabel">📦 Deck: —</div>
     </div>
@@ -55,7 +68,7 @@
   <section id="p1" style="display:none">
     <div class="tag">Phase 1 — Prompt + Vote</div>
     <div class="bubble" id="p1Question"></div>
-    <div class="small">Vote who fits the question best (everyone votes).</div>
+    <div class="small">Vote who fits the question best.</div>
     <div class="list" id="p1VoteList"></div>
     <div class="small center" id="p1Status"></div>
   </section>
@@ -63,7 +76,7 @@
   <!-- PHASE 2 — Interrogation -->
   <section id="p2" style="display:none">
     <div class="tag">Phase 2 — Interrogation</div>
-    <div class="bubble"><b>Normal Question:</b><br><span id="p2NormalQ"></span></div>
+    <div class="bubble"><b>The Question:</b><br><span id="p2NormalQ"></span></div>
     <div class="timer" id="p2Timer">05:00</div>
     <div class="bubble" id="p2WhoVoted"></div>
     <button class="btn-white" id="skipBtn" style="display:none" onclick="hostSkipToFinal()">
@@ -75,33 +88,72 @@
   <!-- PHASE 3 — Final Vote -->
   <section id="p3" style="display:none">
     <div class="tag">Phase 3 — Final Vote</div>
-    <div class="bubble"><b>Vote out the Odd1Owt</b></div>
+    <div class="bubble"><b>Who is the Odd1Owt?</b><br><span class="small">Vote — results are hidden until everyone has voted.</span></div>
     <div class="list" id="p3VoteList"></div>
     <div class="small center" id="p3Status"></div>
   </section>
 
-  <!-- PHASE 4 — Reveal -->
+  <!-- PHASE 4 — Dramatic Reveal -->
   <section id="p4" style="display:none">
     <div class="tag">Phase 4 — Reveal</div>
-    <div class="revealWrap">
-      <div class="revealBox">
-        <div class="sweep"></div>
-        <div class="center big" id="p4Title">Revealing...</div>
-        <div class="bubble" id="p4Details" style="margin-top:12px"></div>
+
+    <!-- Step 1: countdown -->
+    <div class="reveal-step" id="r-step1">
+      <div class="center" style="margin-top:10px;color:var(--muted);font-size:14px;font-weight:700">
+        The group voted for…
+      </div>
+      <div class="countdown-num" id="r-countdown">3</div>
+    </div>
+
+    <!-- Step 2: most-voted name -->
+    <div class="reveal-step" id="r-step2">
+      <div class="center" style="margin-top:14px;color:var(--muted);font-size:13px">
+        The group pointed at…
+      </div>
+      <div class="accused-name" id="r-accusedName"></div>
+      <div class="vote-count-label" id="r-voteCount"></div>
+    </div>
+
+    <!-- Step 3: CAUGHT / ESCAPED verdict -->
+    <div class="reveal-step" id="r-step3">
+      <div class="verdict-banner" id="r-verdictBanner">
+        <div class="verdict-sweep"></div>
+        <div class="verdict-word" id="r-verdictWord"></div>
+        <div class="verdict-sub"  id="r-verdictSub"></div>
       </div>
     </div>
-    <div class="bubble" id="p4Score"></div>
-    <button class="btn-red" id="nextRoundBtn" onclick="hostStartRound()">Next Round</button>
-    <div class="small center" id="p4HostNote" style="margin-top:10px"></div>
+
+    <!-- Step 4: full reveal — who was the Odd1Owt + both questions -->
+    <div class="reveal-step" id="r-step4">
+      <div class="identity-reveal">
+        <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:800">The Odd1Owt was</div>
+        <div class="odd-name-big" id="r-oddName"></div>
+      </div>
+
+      <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:800;margin-top:14px;margin-bottom:4px">The Questions</div>
+      <div class="q-compare">
+        <div class="q-box normal">
+          <div class="q-label">Everyone else</div>
+          <div class="q-text" id="r-normalQ"></div>
+        </div>
+        <div class="q-box odd">
+          <div class="q-label">Odd1Owt</div>
+          <div class="q-text" id="r-oddQ"></div>
+        </div>
+      </div>
+
+      <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:800;margin:14px 0 4px">Vote Tally</div>
+      <div id="r-tally"></div>
+
+      <div class="bubble" id="p4Score" style="margin-top:14px"></div>
+
+      <button class="btn-red" id="nextRoundBtn" onclick="hostStartRound()" style="margin-top:6px">Next Round</button>
+      <div class="small center" id="p4HostNote" style="margin-top:10px"></div>
+    </div>
   </section>
 
 </div>
 
-<!--
-  Load order matters:
-  1. questions.js  — defines the DECKS object (plain global, no imports)
-  2. game.js       — uses DECKS; imports Firebase as an ES module
--->
 <script src="questions.js"></script>
 <script type="module" src="game.js"></script>
 </body>
