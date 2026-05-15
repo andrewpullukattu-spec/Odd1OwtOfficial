@@ -21,10 +21,21 @@ const playerId = localStorage.getItem("odd1owt_pid") || crypto.randomUUID();
 localStorage.setItem("odd1owt_pid", playerId);
 
 // ─── MODULE STATE ─────────────────────────────────────────────────────────────
-let roomId            = null;
-let unsub             = null;
-let timerInterval     = null;
-let localRevealTimeout = null;
+let roomId             = null;
+let unsub              = null;
+let timerInterval      = null;
+let revealTimeouts     = [];   // all reveal step timeouts so we can cancel them
+let revealRunning      = false;
+
+// ─── TOAST SYSTEM — replaces all alert() calls ────────────────────────────────
+function toast(msg, type = "info") {
+  const container = document.getElementById("toastContainer");
+  const el = document.createElement("div");
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 function roomRef() { return doc(db, "rooms", roomId); }
@@ -56,6 +67,22 @@ function escapeHtml(str) {
   );
 }
 
+function clearRevealTimeouts() {
+  revealTimeouts.forEach(clearTimeout);
+  revealTimeouts = [];
+  revealRunning = false;
+  // Hide all steps
+  document.querySelectorAll(".reveal-step").forEach(s => s.classList.remove("active"));
+}
+
+function revealStep(id, delay) {
+  const t = setTimeout(() => {
+    document.querySelectorAll(".reveal-step").forEach(s => s.classList.remove("active"));
+    document.getElementById(id)?.classList.add("active");
+  }, delay);
+  revealTimeouts.push(t);
+}
+
 // ─── QUESTION PICKING (per-deck, no repeats) ──────────────────────────────────
 function pickTwoQuestions(state) {
   const deckKey = state.activeDeck || "all";
@@ -66,24 +93,18 @@ function pickTwoQuestions(state) {
   const lastKey = `lastQ_${deckKey}`;
   const used    = Array.isArray(state[usedKey]) ? state[usedKey] : [];
 
-  // All indices in the pool
   let available = pool.map((_, i) => i).filter(i => !used.includes(i));
-
-  // Reset if exhausted
   if (available.length < 2) available = pool.map((_, i) => i);
 
-  // Avoid immediate repeats where possible
-  const last = Array.isArray(state[lastKey]) ? state[lastKey] : [];
+  const last  = Array.isArray(state[lastKey]) ? state[lastKey] : [];
   const fresh = available.filter(i => !last.includes(i));
   if (fresh.length >= 2) available = fresh;
 
-  // Pick two distinct indices
   const idx1      = available[Math.floor(Math.random() * available.length)];
   let   remaining = available.filter(i => i !== idx1);
   if (!remaining.length) remaining = pool.map((_, i) => i).filter(i => i !== idx1);
   const idx2 = remaining[Math.floor(Math.random() * remaining.length)];
 
-  // Update the used list (reset if nearly exhausted)
   const currentUsed = Array.isArray(state[usedKey]) ? state[usedKey] : [];
   const nextUsed    = (currentUsed.length + 2 >= pool.length)
     ? [idx1, idx2]
@@ -92,9 +113,7 @@ function pickTwoQuestions(state) {
   return {
     normalQuestion: pool[idx1],
     oddQuestion:    pool[idx2],
-    usedKey,
-    nextUsed,
-    lastKey,
+    usedKey, nextUsed, lastKey,
     nextLast: [idx1, idx2]
   };
 }
@@ -105,24 +124,23 @@ window.kickPlayer = async function(targetId) {
   if (!snap.exists()) return;
   const state = snap.data();
   if (state.hostId !== playerId) return;
-  if (targetId === playerId)      return alert("Can't kick yourself!");
+  if (targetId === playerId) return toast("Can't kick yourself!", "error");
 
-  const players  = { ...state.players };
-  const scores   = { ...state.scores };
-  const order    = (state.playerOrder || []).filter(pid => pid !== targetId);
-  const p1Votes  = { ...(state.p1Votes || {}) };
-  const p3Votes  = { ...(state.p3Votes || {}) };
+  const players = { ...state.players };
+  const scores  = { ...state.scores };
+  const order   = (state.playerOrder || []).filter(pid => pid !== targetId);
+  const p1Votes = { ...(state.p1Votes || {}) };
+  const p3Votes = { ...(state.p3Votes || {}) };
 
   delete players[targetId];
   delete scores[targetId];
   delete p1Votes[targetId];
   delete p3Votes[targetId];
-
-  // Remove any votes cast FOR the kicked player
   Object.keys(p1Votes).forEach(k => { if (p1Votes[k] === targetId) delete p1Votes[k]; });
   Object.keys(p3Votes).forEach(k => { if (p3Votes[k] === targetId) delete p3Votes[k]; });
 
   await updateDoc(roomRef(), { players, scores, playerOrder: order, p1Votes, p3Votes });
+  toast(`${state.players[targetId]} was kicked`, "info");
 };
 
 // ─── DECK SELECTION (host only) ───────────────────────────────────────────────
@@ -136,17 +154,38 @@ window.selectDeck = async function(deckKey) {
 // ─── ROOM CREATION / JOINING ──────────────────────────────────────────────────
 window.createRoom = async function() {
   const name = getName();
-  if (!name) return alert("Enter your name first.");
+  if (!name) return toast("Enter your name first.", "error");
   roomId = randomCode();
   await joinRoomInternal(true);
 };
 
 window.joinRoom = async function() {
   const name = getName();
-  if (!name) return alert("Enter your name first.");
-  roomId = document.getElementById("codeInput").value.trim().toUpperCase();
-  if (!roomId) return alert("Enter a lobby code.");
+  if (!name) return toast("Enter your name first.", "error");
+  // codeInput may be hidden but still holds the value (set by invite link or manual entry)
+  roomId = (document.getElementById("codeInput")?.value || "").trim().toUpperCase();
+  if (!roomId) return toast("Enter a lobby code.", "error");
   await joinRoomInternal(false);
+};
+
+// Show/hide manual code entry on the home screen
+window.showJoinInput = function() {
+  document.getElementById("homeButtons").style.display = "none";
+  document.getElementById("joinManual").style.display  = "block";
+  document.getElementById("codeInput").focus();
+};
+
+window.hideJoinInput = function() {
+  document.getElementById("joinManual").style.display  = "none";
+  document.getElementById("homeButtons").style.display = "block";
+};
+
+// Clear the invite-link pre-fill and go back to normal home
+window.clearInvite = function() {
+  document.getElementById("joinFromLink").style.display  = "none";
+  document.getElementById("homeButtons").style.display   = "block";
+  document.getElementById("codeInput").value             = "";
+  history.replaceState({}, "", location.pathname);
 };
 
 async function joinRoomInternal(isHost) {
@@ -155,12 +194,11 @@ async function joinRoomInternal(isHost) {
   const snap = await getDoc(ref);
   const data = snap.exists() ? snap.data() : null;
 
-  // Duplicate-name check
   if (data?.players) {
     const taken = Object.entries(data.players).some(([pid, pname]) =>
       pid !== playerId && (pname || "").toLowerCase() === name.toLowerCase()
     );
-    if (taken) return alert("That name is already taken in this lobby.");
+    if (taken) return toast("That name is already taken in this lobby.", "error");
   }
 
   const existingOrder = Array.isArray(data?.playerOrder) ? data.playerOrder : [];
@@ -190,10 +228,9 @@ function listenRoom() {
     if (!snap.exists()) return;
     const state = snap.data();
 
-    // Kicked players are sent back to home
     if (!state.players?.[playerId]) {
       if (unsub) { unsub(); unsub = null; }
-      alert("You were removed from the lobby.");
+      toast("You were removed from the lobby.", "error");
       show("home");
       return;
     }
@@ -208,13 +245,13 @@ window.hostStartRound = async function() {
   const snap  = await getDoc(roomRef());
   if (!snap.exists()) return;
   const state = snap.data();
-  if (state.hostId !== playerId) return alert("Only the host can start.");
+  if (state.hostId !== playerId) return toast("Only the host can start.", "error");
 
   const ids = (Array.isArray(state.playerOrder) && state.playerOrder.length)
     ? state.playerOrder.filter(pid => state.players?.[pid])
     : Object.keys(state.players || {});
 
-  if (ids.length < 3) return alert("Need at least 3 players.");
+  if (ids.length < 3) return toast("Need at least 3 players.", "error");
 
   const oddId = ids[Math.floor(Math.random() * ids.length)];
   const { normalQuestion, oddQuestion, usedKey, nextUsed, lastKey, nextLast } =
@@ -256,6 +293,7 @@ async function castP3Vote(targetId) {
   const snap = await getDoc(roomRef());
   if (!snap.exists() || snap.data().phase !== "p3_finalvote") return;
   await updateDoc(roomRef(), { [`p3Votes.${playerId}`]: targetId });
+  toast("Vote locked in!", "success");
 }
 
 // ─── HOST AUTO-ADVANCE ────────────────────────────────────────────────────────
@@ -299,9 +337,7 @@ async function tryHostAdvance(state) {
         phase: "p4_reveal",
         scores,
         results: {
-          votedOutId,
-          caught,
-          tally,
+          votedOutId, caught, tally,
           oddId:          state.oddId,
           normalQuestion: state.normalQuestion,
           oddQuestion:    state.oddQuestion
@@ -327,11 +363,11 @@ function render(state) {
   renderScores(state);
 
   const phase = state.phase;
-  if (!phase || phase === "lobby")      { show("lobby"); renderLobbyPlayers(state); renderDeckSelector(state); return; }
-  if (phase === "p1_vote")              { show("p1"); renderPhase1(state); return; }
-  if (phase === "p2_interrogate")       { show("p2"); renderPhase2(state); return; }
-  if (phase === "p3_finalvote")         { show("p3"); renderPhase3(state); return; }
-  if (phase === "p4_reveal")            { show("p4"); renderPhase4(state); return; }
+  if (!phase || phase === "lobby")  { show("lobby"); renderLobbyPlayers(state); renderDeckSelector(state); return; }
+  if (phase === "p1_vote")          { show("p1"); renderPhase1(state); return; }
+  if (phase === "p2_interrogate")   { show("p2"); renderPhase2(state); return; }
+  if (phase === "p3_finalvote")     { show("p3"); renderPhase3(state); return; }
+  if (phase === "p4_reveal")        { show("p4"); renderPhase4(state); return; }
 
   show("lobby"); renderLobbyPlayers(state); renderDeckSelector(state);
 }
@@ -363,8 +399,8 @@ function renderLobbyPlayers(state) {
       <div class="player-row">
         <span class="player-name">
           ${escapeHtml(name)}
-          ${isMe       ? '<span class="you-tag">(you)</span>'  : ""}
-          ${isThisHost ? '<span class="you-tag">👑</span>'      : ""}
+          ${isMe       ? '<span class="you-tag">(you)</span>' : ""}
+          ${isThisHost ? '<span class="you-tag">👑</span>'    : ""}
         </span>
         ${isHost && !isMe
           ? `<button class="kick-btn" onclick="kickPlayer('${pid}')">Kick</button>`
@@ -387,7 +423,6 @@ function renderDeckSelector(state) {
   if (isHost) {
     const grid = document.getElementById("deckGrid");
     grid.innerHTML = "";
-
     Object.entries(DECKS).forEach(([key, deck]) => {
       const usedArr  = state[`usedQ_${key}`];
       const used     = Array.isArray(usedArr) ? usedArr.length : 0;
@@ -404,7 +439,6 @@ function renderDeckSelector(state) {
       card.onclick = () => selectDeck(key);
       grid.appendChild(card);
     });
-
     const used  = Array.isArray(state[`usedQ_${current}`]) ? state[`usedQ_${current}`].length : 0;
     const total = DECKS[current]?.questions.length || 0;
     document.getElementById("deckUsedInfo").textContent =
@@ -435,10 +469,11 @@ function renderScores(state) {
 }
 
 // ─── PHASE 1 ──────────────────────────────────────────────────────────────────
+// NOTE: no label revealing whether you are the Odd1Owt — intentional.
 function renderPhase1(state) {
-  const isOdd = playerId === state.oddId;
+  const myQ = playerId === state.oddId ? state.oddQuestion : state.normalQuestion;
   document.getElementById("p1Question").innerHTML =
-    `<b>Your Prompt:</b><br>${escapeHtml(isOdd ? state.oddQuestion : state.normalQuestion || "…")}`;
+    `<b>Your Question:</b><br>${escapeHtml(myQ || "…")}`;
 
   const list    = document.getElementById("p1VoteList");
   list.innerHTML = "";
@@ -462,27 +497,39 @@ function renderPhase1(state) {
 
 // ─── PHASE 2 ──────────────────────────────────────────────────────────────────
 function renderPhase2(state) {
+  // Show the NORMAL question publicly — the Odd1Owt sees it now and has to keep their cover
   document.getElementById("p2NormalQ").textContent = state.normalQuestion || "";
 
   const players = state.players || {};
   const p1      = state.p1Votes || {};
-  let html = "<b>Who voted for who (Phase 1):</b><br><br>";
+  let html = "<b>Phase 1 votes:</b><br><br>";
   Object.entries(p1).forEach(([voter, target]) => {
-    html += `• ${escapeHtml(players[voter] || "Unknown")} voted ${escapeHtml(players[target] || "Unknown")}<br>`;
+    html += `• ${escapeHtml(players[voter] || "Unknown")} → ${escapeHtml(players[target] || "Unknown")}<br>`;
   });
-  if (!Object.keys(p1).length) html += "<span class='small'>No votes yet.</span>";
+  if (!Object.keys(p1).length) html += "<span class='small'>No votes.</span>";
   document.getElementById("p2WhoVoted").innerHTML = html;
 
   if (timerInterval) clearInterval(timerInterval);
   const endsAt = state.p2EndsAt || (Date.now() + 5 * 60 * 1000);
-  const tick   = () => { document.getElementById("p2Timer").textContent = fmtTime(endsAt - Date.now()); };
+
+  const timerEl = document.getElementById("p2Timer");
+  const tick = () => {
+    const left = endsAt - Date.now();
+    timerEl.textContent = fmtTime(left);
+    // Pulse red in last 30 seconds
+    if (left <= 30000) {
+      timerEl.classList.add("urgent");
+    } else {
+      timerEl.classList.remove("urgent");
+    }
+  };
   tick();
   timerInterval = setInterval(tick, 250);
 
   document.getElementById("skipBtn").style.display =
     state.hostId === playerId ? "block" : "none";
   document.getElementById("p2Status").textContent =
-    `Discuss now. Phase 1 votes: ${Object.keys(p1).length}/${Object.keys(players).length}.`;
+    `Discuss now. ${Object.keys(p1).length}/${Object.keys(players).length} phase 1 votes.`;
 }
 
 // ─── PHASE 3 ──────────────────────────────────────────────────────────────────
@@ -504,62 +551,120 @@ function renderPhase3(state) {
 
   const total = Object.keys(players).length;
   const done  = Object.keys(state.p3Votes || {}).length;
-  document.getElementById("p3Status").textContent = `${done}/${total} final votes submitted`;
+  document.getElementById("p3Status").textContent = `${done}/${total} votes locked in`;
 }
 
-// ─── PHASE 4 ──────────────────────────────────────────────────────────────────
+// ─── PHASE 4 — DRAMATIC REVEAL ────────────────────────────────────────────────
+// Sequence:
+//   0ms   → Step 1: "The group voted for…" + countdown 3
+//   900ms → countdown 2
+//   1800ms→ countdown 1
+//   2700ms→ Step 2: Most-voted name appears
+//   4200ms→ Step 3: CAUGHT / ESCAPED verdict
+//   5800ms→ Step 4: Full reveal — Odd1Owt identity + question comparison + tally
+
+let lastRevealRound = null; // prevent re-running the animation on re-render
+
 function renderPhase4(state) {
   const players = state.players || {};
   const res     = state.results;
+  if (!res) return;
 
+  // Next round / host controls (always update these)
   document.getElementById("nextRoundBtn").style.display =
     state.hostId === playerId ? "block" : "none";
   document.getElementById("p4HostNote").textContent = state.hostId === playerId
-    ? "Start the next round when you're ready."
+    ? "Start the next round when ready."
     : "Waiting for host to start next round…";
 
-  if (localRevealTimeout) clearTimeout(localRevealTimeout);
-  document.getElementById("p4Title").textContent    = "Counting votes...";
-  document.getElementById("p4Details").innerHTML    = "<span class='small'>Stand by…</span>";
+  // Don't restart the animation if we're already on this round's reveal
+  if (revealRunning && lastRevealRound === state.round) return;
+  lastRevealRound = state.round;
+  clearRevealTimeouts();
+  revealRunning = true;
 
-  localRevealTimeout = setTimeout(() => {
-    const votedOutName = players[res.votedOutId] || "Unknown";
-    const oddName      = players[res.oddId]      || "Unknown";
-    const verdict      = res.caught
-      ? `<span class="win">CAUGHT!</span>`
-      : `<span class="lose">ESCAPED!</span>`;
-    const tallyLines   = Object.entries(res.tally || {})
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([pid, n]) => `• ${escapeHtml(players[pid] || "Unknown")}: <b>${n}</b>`)
-      .join("<br>");
+  // Pre-fill all the content before the animation starts
+  const votedOutName = players[res.votedOutId] || "Unknown";
+  const oddName      = players[res.oddId]      || "Unknown";
+  const caught       = res.caught;
 
-    document.getElementById("p4Title").innerHTML  = verdict;
-    document.getElementById("p4Details").innerHTML = `
-      <b>Most votes:</b> ${escapeHtml(votedOutName)}<br>
-      <b>The Odd1Owt was:</b> ${escapeHtml(oddName)}<br><br>
-      <b>Final vote tally:</b><br>${tallyLines || "<span class='small'>No votes?</span>"}<br><br>
-      <b>Questions this round:</b><br>
-      Normal: ${escapeHtml(res.normalQuestion || "")}<br>
-      Odd: ${escapeHtml(res.oddQuestion || "")}
-    `;
-  }, 1400);
+  // Step 2
+  document.getElementById("r-accusedName").textContent = votedOutName;
+  const topVotes = res.tally?.[res.votedOutId] || 0;
+  document.getElementById("r-voteCount").textContent =
+    `${topVotes} vote${topVotes !== 1 ? "s" : ""}`;
+
+  // Step 3
+  const banner = document.getElementById("r-verdictBanner");
+  banner.className = `verdict-banner ${caught ? "caught" : "escaped"}`;
+  document.getElementById("r-verdictWord").textContent = caught ? "CAUGHT!" : "ESCAPED!";
+  document.getElementById("r-verdictSub").textContent  = caught
+    ? `${votedOutName} was the Odd1Owt — the group got it right!`
+    : `${oddName} slipped through — the group was wrong!`;
+
+  // Step 4
+  document.getElementById("r-oddName").textContent  = oddName;
+  document.getElementById("r-normalQ").textContent  = res.normalQuestion || "";
+  document.getElementById("r-oddQ").textContent     = res.oddQuestion    || "";
+
+  // Build tally with bar widths
+  const maxVotes = Math.max(...Object.values(res.tally || {}), 1);
+  const tallyRows = Object.entries(res.tally || {})
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([pid, n], i) => {
+      const pct = Math.round((n / maxVotes) * 100);
+      return `
+        <div class="tally-row" style="animation-delay:${i * 120}ms">
+          <span>${escapeHtml(players[pid] || "Unknown")}</span>
+          <div class="tally-bar-wrap">
+            <div class="tally-bar" style="width:${pct}%"></div>
+          </div>
+          <span class="tally-n">${n}</span>
+        </div>`;
+    }).join("");
+  document.getElementById("r-tally").innerHTML = tallyRows || "<span class='small'>No votes.</span>";
+
+  // ── Animate the sequence ──
+  // Step 1: countdown 3
+  revealStep("r-step1", 0);
+  const countEl = document.getElementById("r-countdown");
+
+  const t1 = setTimeout(() => { countEl.textContent = "2"; countEl.style.animation = "none"; countEl.offsetHeight; countEl.style.animation = ""; }, 900);
+  const t2 = setTimeout(() => { countEl.textContent = "1"; countEl.style.animation = "none"; countEl.offsetHeight; countEl.style.animation = ""; }, 1800);
+  revealTimeouts.push(t1, t2);
+
+  // Step 2: name
+  revealStep("r-step2", 2700);
+
+  // Step 3: verdict
+  revealStep("r-step3", 4200);
+
+  // Step 4: full reveal
+  revealStep("r-step4", 5800);
+
+  const tDone = setTimeout(() => { revealRunning = false; }, 6200);
+  revealTimeouts.push(tDone);
 }
 
 // ─── COPY INVITE ──────────────────────────────────────────────────────────────
 window.copyInvite = function() {
   navigator.clipboard.writeText(`${location.origin}${location.pathname}?room=${roomId}`);
-  alert("Invite link copied!");
+  toast("Invite link copied!", "success");
 };
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
-
-// Restore saved name
 const savedName = localStorage.getItem("odd1owt_name");
 if (savedName) document.getElementById("nameInput").value = savedName;
 
-// Auto-join from URL ?room= param
-const params = new URLSearchParams(location.search);
-if (params.get("room")) {
-  document.getElementById("codeInput").value = params.get("room").toUpperCase();
-  show("join");
+const params    = new URLSearchParams(location.search);
+const roomParam = params.get("room");
+if (roomParam) {
+  // Pre-fill the hidden code input and show the "joining X" UI on the home screen
+  const code = roomParam.toUpperCase();
+  document.getElementById("codeInput").value        = code;
+  document.getElementById("joinCodeLabel").textContent = code;
+  document.getElementById("joinFromLink").style.display  = "block";
+  document.getElementById("homeButtons").style.display   = "none";
+  // Stay on home so they just enter their name and hit Join
+  show("home");
 }
